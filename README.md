@@ -4,11 +4,7 @@
 
 ### Build require-addons for DayZ mods — one `.exe`, no installation
 
-<br>
-
-<img src="docs/screenshots/111.jpg" width="900" alt="111">
-
-</div>
+<img src="docs/screenshots/111.png" width="900" alt="DayZ Override Builder">
 
 **English** · [Русский](README.ru.md)
 
