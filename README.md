@@ -1,2 +1,2 @@
 # DayZ-Override-Builder
-Инструмент для владельцев серверов DayZ: сборка рекваер-аддонов (override) из PBO модов, миграция types.xml, слияние оверрайдов, квесты и лодауты Expansion, спавн-лут, настройка миссии и строгая проверка JSON/XML. Одна портативная программа. Интерфейс RU/EN/UK.
+A tool for DayZ server owners: build requester addons (override) from PBO mods, migration types.xml , merge overlays, Expansion quests and lodouts, spawn loot, mission setup, and strict JSON/XML validation. One portable program. The RU/EN/UK interface.
