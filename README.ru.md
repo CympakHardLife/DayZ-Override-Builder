@@ -4,6 +4,8 @@
 
 ### Создание рекваер-аддонов (override) для модов DayZ — один `.exe`, без установки
 
+<img src="docs/screenshots/111.png" width="900" alt="DayZ Override Builder">
+
 [English](README.md) · **Русский**
 
 [![Лицензия: MIT](https://img.shields.io/badge/%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-22c55e.svg?style=for-the-badge)](LICENSE)
