@@ -10,7 +10,7 @@ import (
 	"dayzoverride/analyze"
 )
 
-var version = "1.10.2"
+var version = "1.11.0"
 
 func main() {
 	analyzeFlag := flag.String("analyze", "", "CLI: проанализировать PBO и вывести сводку")

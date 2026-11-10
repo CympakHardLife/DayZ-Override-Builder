@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DayZ Override Builder</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">DZ</div>
+    <div>
+      <h1>DayZ Override Builder</h1>
+      <p>Создание рекваер-аддонов (override) для модов DayZ</p>
+    </div>
+  </div>
+  <nav class="steps">
+    <button class="step active" data-tab="mod" id="stepMod"><span>1</span> Мод</button>
+    <button class="step" data-tab="items" id="stepItems"><span>2</span> Предметы</button>
+    <button class="step" data-tab="genr" id="stepGen" title="Генерация аддона + настройки DayZ Tools (подпись, ключи, бинаризация)"><span>3</span> Генерация</button>
+    <span class="nav-sep"></span>
+    <button class="step" data-tab="diff" id="stepDiff" title="Сверка старой и новой версии мода"><span>⇄</span> Сверка версий</button>
+    <button class="step" data-tab="types" id="stepTypes" title="Миграция и оптимизация types.xml"><span>T</span> Types</button>
+    <button class="step" data-tab="mrg" id="stepMerge" title="Слияние нескольких оверрайдов в один"><span>⊕</span> Слияние</button>
+    <button class="step" data-tab="expq" id="stepExpQ" title="DayZ Expansion: проверка и слияние квестов"><span>❓</span> Exp. Квесты</button>
+    <button class="step" data-tab="expl" id="stepExpL" title="DayZ Expansion: проверка и слияние лодаутов"><span>🎒</span> Exp. Лодауты</button>
+    <button class="step" data-tab="spw" id="stepSpw" title="cfgspawnabletypes и cfgrandompresets: проверка и слияние"><span>📦</span> Спавн-лут</button>
+    <button class="step" data-tab="msn" id="stepMsn" title="globals, economy, events, weather, gameplay и другие файлы миссии + день/ночь"><span>🌍</span> Миссия</button>
+    <button class="step" data-tab="ind" id="stepInd" title="Настройка мода InediaInfectedAI с подсказками из вики"><span>🧟</span> Inedia AI</button>
+    <button class="step" data-tab="trj" id="stepTrj" title="Настройка модов Terje (медицина, навыки и др.)"><span>💊</span> Terje</button>
+    <button class="step" data-tab="chk" id="stepChk" title="Проверка файлов JSON/XML с указанием строк и подсказками"><span>✓</span> Проверка файлов</button>
+    <button class="step" data-tab="log" id="stepLog" title="Все действия и ошибки программы"><span>☰</span> Журнал</button>
+    <span class="nav-sep"></span>
+    <span class="lang-box">
+      <button class="btn sm" id="aiCfgBtn" title="ИИ-помощник: разбор гайдов и перевод описаний (бесплатные нейросети)">🤖</button>
+      <select id="langSel" title="Язык интерфейса / Interface language"></select>
+      <button class="btn sm" id="langCfgBtn" title="Настроить список языков">⚙</button>
+    </span>
+  </nav>
+</header>
+
+<main>
+  <!-- ============ TAB 1: MOD ============ -->
+  <section id="tab-mod" class="tab active">
+    <div class="card">
+      <h2>Выберите PBO мода для анализа</h2>
+      <div class="drop" id="dropZone">
+        <div class="drop-icon">⬇</div>
+        <p>Перетащите сюда один или несколько <b>.pbo</b></p>
+        <p class="muted">или</p>
+        <button class="btn" id="pickBtn">Выбрать файлы…</button>
+        <input type="file" id="fileInput" multiple accept=".pbo" hidden>
+      </div>
+      <div class="or-divider"><span>или укажите путь на этом компьютере</span></div>
+      <div class="row">
+        <input type="text" id="pathInput" class="grow" placeholder="C:\DayZServer\@МойМод  или  C:\...\mod.pbo">
+        <button class="btn" id="analyzePathBtn">Анализировать путь</button>
+      </div>
+      <p class="hint">Можно указать папку мода (например @DukesGhillies) — программа найдёт все .pbo внутри. Файл config.bin будет распакован и дебинаризован автоматически.<br>
+      <b>Для больших модов (сотни МБ и больше) указывайте путь</b> — это мгновенно: без копирования файлов. Перетаскивание файлов сначала передаёт их во временную папку программы, для ган-пака на несколько ГБ это занимает минуты.<br>
+      Настройки DayZ Tools (подпись, ключи, бинаризация) — на вкладке «3 Генерация», доступны в любой момент.</p>
+    </div>
+
+    <div class="card hidden" id="modSummary">
+      <h2>Результат анализа</h2>
+      <div id="pboList"></div>
+      <div id="patchesBox"></div>
+      <details id="warnBox" class="hidden"><summary></summary><ul id="warnList"></ul></details>
+      <div id="cfgViewers"></div>
+      <div class="actions-r">
+        <button class="btn primary" id="toItemsBtn">Перейти к предметам →</button>
+      </div>
+    </div>
+    <div class="loading hidden" id="loadMod"><div class="spin"></div><span>Анализирую PBO…</span></div>
+    <div class="card hidden" id="analyzeLogCard">
+      <h2>Журнал анализа</h2>
+      <pre id="analyzeLog" class="joblog"></pre>
+    </div>
+  </section>
+
+  <!-- ============ TAB 2: ITEMS ============ -->
+  <section id="tab-items" class="tab">
+    <div class="card">
+      <div class="toolbar">
+        <input type="text" id="searchInput" placeholder="Поиск по класснейму…">
+        <select id="catFilter"><option value="">Все категории</option></select>
+        <label class="chk"><input type="checkbox" id="scopeFilter" checked> только scope=2</label>
+        <label class="chk"><input type="checkbox" id="editedFilter"> только с правками</label>
+        <label class="chk"><input type="checkbox" id="showEmptyCols"> пустые колонки</label>
+        <span class="spacer"></span>
+        <span class="counter" id="counter"></span>
+        <button class="btn sm" id="checkAllBtn">Отметить видимые</button>
+        <button class="btn sm" id="uncheckAllBtn">Снять все</button>
+        <button class="btn sm" id="bulkBtn">Массовая правка…</button>
+      </div>
+      <p class="hint">Кликните по ячейке, чтобы изменить значение. Кнопка «+» — добавить параметр, которого у предмета не было (например карго-слоты). Отмеченные предметы попадут в аддон. Серым курсивом — значения, унаследованные от родительских классов; «—» — параметр не найден в моде (унаследован от ванильного класса игры).</p>
+      <div class="table-wrap" id="tableWrap"><p class="hint" style="padding:14px">Нет данных — сначала проанализируйте мод на вкладке «1 Мод».</p></div>
+      <div class="actions-r">
+        <button class="btn primary" id="toGenBtn">К генерации аддона →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 3: GENERATE ============ -->
+  <section id="tab-genr" class="tab">
+    <div class="card" id="toolsCard">
+      <h2>DayZ Tools — подпись и сборка (необязательно)</h2>
+      <div class="row">
+        <input type="text" id="toolsPath" class="grow" placeholder="C:\Program Files (x86)\Steam\steamapps\common\DayZ Tools">
+        <button class="btn" id="toolsAutoBtn">Автопоиск</button>
+        <button class="btn" id="toolsCheckBtn">Проверить</button>
+      </div>
+      <div id="toolsStatus" class="tools-status"></div>
+      <div class="tools-opts">
+        <label class="chk big"><input type="checkbox" id="signPbo"> Подписать PBO автоматически (DSSignFile)</label>
+        <div id="signBlock" class="sign-block hidden">
+          <label class="fld">Приватный ключ (.biprivatekey)
+            <input type="text" id="keyPath" placeholder="C:\DayZKeys\MyServerKey.biprivatekey">
+          </label>
+          <details>
+            <summary class="link-sum">Нет ключа? Создать новую пару ключей (DSCreateKey)</summary>
+            <div class="row" style="margin-top:8px">
+              <input type="text" id="newKeyName" placeholder="Имя, напр. MyServerKey" style="width:220px">
+              <input type="text" id="newKeyDir" class="grow" placeholder="Папка для ключей, напр. C:\DayZKeys">
+              <button class="btn" id="createKeyBtn">Создать</button>
+            </div>
+            <p class="hint">Появятся два файла: .biprivatekey (секретный, для подписи) и .bikey (публичный, в keys сервера). Путь подставится автоматически.</p>
+          </details>
+        </div>
+        <label class="chk big"><input type="checkbox" id="binarizeCfg"> Бинаризовать config.cpp → config.bin (CfgConvert)</label>
+        <label class="chk big"><input type="checkbox" id="useFileBank"> Упаковать официальным FileBank вместо встроенного упаковщика</label>
+      </div>
+      <p class="hint">Программа не копирует инструменты — вызывает их прямо из указанной папки при каждой сборке, поэтому обновления DayZ Tools из Steam подхватываются автоматически. Путь и настройки сохраняются в settings.json.</p>
+    </div>
+    <div class="cols">
+      <div class="card">
+        <h2>Настройки аддона</h2>
+        <label class="fld">Имя аддона (классы CfgPatches, имя PBO)
+          <input type="text" id="addonName">
+        </label>
+        <label class="fld">requiredAddons — аддоны исходного мода (через запятую)
+          <textarea id="reqAddons" rows="3"></textarea>
+        </label>
+        <label class="chk big"><input type="checkbox" id="makePbo" checked> Собрать готовый .pbo (останется только подписать)</label>
+        <div id="editsSummary" class="summary"></div>
+        <div class="actions">
+          <button class="btn" id="previewBtn">Предпросмотр config.cpp</button>
+          <button class="btn primary" id="downloadBtn">⬇ Скачать ZIP</button>
+        </div>
+        <div class="or-divider"><span>или сохранить в папку на этом компьютере</span></div>
+        <div class="row">
+          <input type="text" id="outPath" class="grow" placeholder="C:\DayZ\override_out">
+          <button class="btn" id="saveDirBtn">Сохранить</button>
+        </div>
+        <div id="genStatus" class="status hidden"></div>
+        <pre id="genLog" class="joblog hidden"></pre>
+        <p class="hint">После генерации: подпишите PBO своим ключом (или включите автоподпись выше), положите папку @Аддон на сервер и клиентам, ключ .bikey — в keys. Подробная инструкция — в README_RU.txt внутри архива.</p>
+      </div>
+      <div class="card grow-col">
+        <h2>config.cpp</h2>
+        <pre id="cfgPreview" class="preview">Нажмите «Предпросмотр config.cpp», чтобы увидеть будущий конфиг аддона.</pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+  <!-- ============ TAB: DIFF (сверка версий) ============ -->
+  <section id="tab-diff" class="tab">
+    <div class="card">
+      <h2>Сверка версий мода — что изменилось после обновления</h2>
+      <p class="hint" style="margin:0 0 12px">Загрузите PBO старой версии и PBO новой версии (можно несколько с каждой стороны, либо укажите пути к папкам). Программа сравнит все класснеймы и покажет: новые предметы, удалённые, и по каждому изменённому классу — какие именно параметры автор поменял (базовые классы, ТТХ, описания).</p>
+      <div class="cols">
+        <div class="grow">
+          <label class="fld">СТАРАЯ версия — .pbo файлы
+            <input type="file" id="diffOldFiles" multiple accept=".pbo,.cpp">
+          </label>
+          <label class="fld">…или путь к файлу/папке старой версии
+            <input type="text" id="diffOldPath" placeholder="C:\Mods\@GunPack_old">
+          </label>
+        </div>
+        <div class="grow">
+          <label class="fld">НОВАЯ версия — .pbo файлы
+            <input type="file" id="diffNewFiles" multiple accept=".pbo,.cpp">
+          </label>
+          <label class="fld">…или путь к файлу/папке новой версии
+            <input type="text" id="diffNewPath" placeholder="C:\Mods\@GunPack_new">
+          </label>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="diffRunBtn">Сравнить версии</button>
+        <button class="btn hidden" id="diffReportBtn">⬇ Скачать отчёт (.txt)</button>
+      </div>
+      <div id="diffStatus" class="status hidden"></div>
+      <pre id="diffLog" class="joblog hidden"></pre>
+    </div>
+    <div class="card hidden" id="diffResult">
+      <h2>Результат сверки</h2>
+      <div id="diffChips" class="tools-status"></div>
+      <div id="diffLists"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: TYPES ============ -->
+  <section id="tab-types" class="tab">
+    <div class="cols">
+      <div class="card grow">
+        <h2>Миграция types.xml — после вайпа или обновления</h2>
+        <p class="hint" style="margin:0 0 12px">Ваши сохранённые настройки лута переносятся в новый (ванильный) types.xml: совпадающие записи берутся из ВАШЕГО файла, новые класснеймы остаются с ванильными значениями и попадают в отчёт.</p>
+        <label class="fld">МОЙ сохранённый types.xml (до вайпа)
+          <input type="file" id="tmMy" accept=".xml">
+        </label>
+        <label class="fld">НОВЫЙ types.xml (после вайпа/обновления)
+          <input type="file" id="tmNew" accept=".xml">
+        </label>
+        <label class="chk big"><input type="checkbox" id="tmKeepMissing" checked> Сохранять мои записи, которых нет в новом файле (предметы модов)</label>
+        <div class="actions">
+          <button class="btn primary" id="tmRunBtn">Объединить</button>
+          <button class="btn hidden" id="tmDownloadBtn">⬇ Скачать объединённый types.xml</button>
+          <button class="btn hidden" id="tmReportBtn">⬇ Отчёт (.txt)</button>
+        </div>
+        <div id="tmStatus" class="status hidden"></div>
+        <div id="tmChips" class="tools-status"></div>
+        <pre id="tmLog" class="joblog hidden"></pre>
+      </div>
+      <div class="card grow">
+        <h2>Проверка и оптимизация types.xml</h2>
+        <p class="hint" style="margin:0 0 12px">Проверка валидности и типовых ошибок: nominal меньше min, несогласованные quantmin/quantmax, дубликаты, отсутствующие lifetime/flags, мусорные значения. Неспавнящиеся записи (nominal=0 и min=0) приводятся к короткому виду — только lifetime и flags. На выходе — чистый файл с единым форматированием.</p>
+        <label class="fld">types.xml для проверки
+          <input type="file" id="toFile" accept=".xml">
+        </label>
+        <label class="chk big"><input type="checkbox" id="toSimplify" checked> Упрощать неспавнящиеся записи (nominal=0 и min=0)</label>
+        <div class="actions">
+          <button class="btn primary" id="toRunBtn">Проверить и исправить</button>
+          <button class="btn hidden" id="toDownloadBtn">⬇ Скачать исправленный types.xml</button>
+          <button class="btn hidden" id="toReportBtn">⬇ Отчёт (.txt)</button>
+        </div>
+        <div id="toStatus" class="status hidden"></div>
+        <div id="toChips" class="tools-status"></div>
+        <pre id="toLog" class="joblog hidden"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: MERGE (слияние оверрайдов) ============ -->
+  <section id="tab-mrg" class="tab">
+    <div class="card">
+      <h2>Слияние оверрайд-аддонов — несколько в один</h2>
+      <p class="hint" style="margin:0 0 12px">Выберите 2 и более оверрайда (.pbo или config.cpp). Программа объединит их в один аддон: CfgPatches и requiredAddons собираются автоматически, одинаковые классы сливаются. При конфликте значений побеждает файл, выбранный ПОЗЖЕ (порядок в списке = приоритет), а каждый конфликт попадает в отчёт.</p>
+      <label class="fld">Файлы оверрайдов (.pbo / config.cpp) — порядок выбора важен
+        <input type="file" id="mrgFiles" multiple accept=".pbo,.cpp">
+      </label>
+      <ol id="mrgList" class="mrg-list"></ol>
+      <div class="row">
+        <label class="fld grow" style="margin:0">Имя объединённого аддона
+          <input type="text" id="mrgName" value="Merged_Override">
+        </label>
+      </div>
+      <div class="tools-opts" style="margin-top:8px">
+        <label class="chk big"><input type="checkbox" id="mrgMakePbo" checked> Собрать готовый .pbo</label>
+        <label class="chk big"><input type="checkbox" id="mrgSign"> Подписать (ключ и DayZ Tools — из вкладки «Генерация»)</label>
+        <label class="chk big"><input type="checkbox" id="mrgBinarize"> Бинаризовать config (CfgConvert)</label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="mrgRunBtn">Слить оверрайды</button>
+        <button class="btn hidden" id="mrgZipBtn">⬇ Скачать ZIP</button>
+      </div>
+      <div class="or-divider"><span>или сохранить в папку</span></div>
+      <div class="row">
+        <input type="text" id="mrgOutPath" class="grow" placeholder="C:\DayZ\merged_out">
+        <button class="btn" id="mrgSaveBtn">Слить и сохранить</button>
+      </div>
+      <div id="mrgStatus" class="status hidden"></div>
+      <pre id="mrgLog" class="joblog hidden"></pre>
+    </div>
+    <div class="card hidden" id="mrgResult">
+      <h2>Результат слияния</h2>
+      <div id="mrgChips" class="tools-status"></div>
+      <div id="mrgConflicts"></div>
+      <details style="margin-top:10px"><summary class="link-sum">Показать объединённый config.cpp</summary>
+        <pre id="mrgPreview" class="preview" style="max-height:400px"></pre>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============ TAB: GUI MOD RESOURCES ============ -->
+  <section id="tab-gui" class="tab">
+    <div class="card">
+      <h2>GUI мода — меню, цвета, тексты, картинки, звуки</h2>
+      <p class="hint" style="margin:0 0 12px">Откройте PBO с интерфейсом мода (лайоуты, картинки, локализация). Правьте цвета пипеткой прямо в .layout, тексты уведомлений — таблицей в stringtable.csv, заменяйте картинки (PNG конвертируется в EDDS автоматически) и звуки. Затем программа пересоберёт PBO и подпишет вашим ключом.</p>
+      <div class="row">
+        <input type="file" id="guiFile" accept=".pbo" style="flex:1">
+        <span class="muted" style="align-self:center">или путь:</span>
+        <input type="text" id="guiPath" class="grow" placeholder="C:\Mods\@SSSWheel\addons\SSSWheelGui.pbo">
+        <button class="btn primary" id="guiOpenBtn">Открыть</button>
+      </div>
+      <div id="guiStatus" class="status hidden"></div>
+    </div>
+
+    <div class="cols hidden" id="guiWork">
+      <div class="card" style="flex:0 1 380px">
+        <h2 id="guiModName">Файлы</h2>
+        <div class="toolbar" style="margin-bottom:8px">
+          <select id="guiKindFilter">
+            <option value="">Все типы</option>
+            <option value="text">Тексты и лайоуты</option>
+            <option value="image">Картинки</option>
+            <option value="sound">Звуки</option>
+            <option value="config">Конфиги</option>
+            <option value="binary">Прочее</option>
+          </select>
+        </div>
+        <div id="guiTree" class="gui-tree"></div>
+      </div>
+      <div class="card grow-col">
+        <h2 id="guiCurTitle">Выберите файл слева</h2>
+        <div id="guiEditorText" class="hidden">
+          <div id="guiColors" class="gui-colors"></div>
+          <textarea id="guiTextArea" rows="22" spellcheck="false"></textarea>
+          <div class="actions">
+            <button class="btn primary" id="guiSaveTextBtn">Сохранить правку</button>
+            <span class="muted" id="guiTextNote" style="align-self:center"></span>
+          </div>
+        </div>
+        <div id="guiEditorCsv" class="hidden">
+          <div class="table-wrap" style="max-height:420px"><table id="guiCsvTable"></table></div>
+          <div class="actions">
+            <button class="btn primary" id="guiSaveCsvBtn">Сохранить таблицу</button>
+            <span class="muted" style="align-self:center">кликните по ячейке и редактируйте — это тексты уведомлений/меню по языкам</span>
+          </div>
+        </div>
+        <div id="guiEditorImg" class="hidden">
+          <div class="gui-imgbox"><img id="guiImgPreview" alt="превью"></div>
+          <div class="actions">
+            <label class="btn">Заменить картинку… <input type="file" id="guiImgReplace" accept=".png,.jpg,.jpeg,.edds,.paa,.dds" hidden></label>
+            <span class="muted" style="align-self:center">PNG/JPG конвертируются в EDDS автоматически; можно подложить готовый .edds</span>
+          </div>
+        </div>
+        <div id="guiEditorSound" class="hidden">
+          <audio id="guiAudio" controls style="width:100%"></audio>
+          <div class="actions">
+            <label class="btn">Заменить звук… <input type="file" id="guiSoundReplace" accept=".ogg,.wav" hidden></label>
+            <span class="muted" style="align-self:center">формат должен совпадать с исходным (обычно .ogg)</span>
+          </div>
+        </div>
+        <div id="guiEditorBin" class="hidden">
+          <p class="muted">Бинарный файл — доступна только замена.</p>
+          <div class="actions">
+            <label class="btn">Заменить файл… <input type="file" id="guiBinReplace" hidden></label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="guiBuildCard">
+      <h2>Пересборка PBO</h2>
+      <label class="chk big"><input type="checkbox" id="guiSign" checked> Подписать моим ключом (DSSignFile; ключ и DayZ Tools — из вкладки «Генерация»)</label>
+      <div class="actions">
+        <button class="btn primary" id="guiBuildBtn">Собрать изменённый PBO (скачать ZIP)</button>
+      </div>
+      <div class="or-divider"><span>или сохранить в папку</span></div>
+      <div class="row">
+        <input type="text" id="guiOutPath" class="grow" placeholder="C:\DayZ\gui_out">
+        <button class="btn" id="guiBuildSaveBtn">Собрать и сохранить</button>
+      </div>
+      <div id="guiBuildStatus" class="status hidden"></div>
+      <pre id="guiBuildLog" class="joblog hidden"></pre>
+      <p class="hint">⚠ Пересобранный PBO — это изменённый мод: старая подпись автора становится невалидной. Подписывайте СВОИМ ключом, свой .bikey положите в keys сервера и раздайте клиентам вместе с модом. Правьте только те моды, которые вам разрешено менять.</p>
+    </div>
+  </section>
+
+  <!-- ============ TAB: EXPANSION QUESTS ============ -->
+  <section id="tab-expq" class="tab">
+    <div class="card">
+      <h2>Expansion Квесты — проверка пака</h2>
+      <p class="hint" style="margin:0 0 12px">Прикрепите ZIP вашей папки Quests (из профиля сервера) или укажите путь. Программа проверит все связи: квест → объективы, квест → NPC, цепочки FollowUp/PreQuest, дубликаты ID, битые JSON — и покажет квестовые линии целиком.</p>
+      <div class="row">
+        <input type="file" id="expqPack" accept=".zip" style="flex:1">
+        <span class="muted" style="align-self:center">или путь:</span>
+        <input type="text" id="expqPath" class="grow" placeholder="C:\Server\profiles\ExpansionMod\Quests">
+      </div>
+      <details style="margin-top:8px"><summary class="link-sum">Дополнительные проверки (лодауты NPC, класснеймы по types.xml)</summary>
+        <div class="row" style="margin-top:8px">
+          <label class="fld grow" style="margin:0">ZIP папки Loadouts (проверка лодаутов NPC)
+            <input type="file" id="expqLoadouts" accept=".zip">
+          </label>
+          <label class="fld grow" style="margin:0">types.xml (проверка класснеймов наград/коллекций)
+            <input type="file" id="expqTypes" accept=".xml">
+          </label>
+        </div>
+      </details>
+      <div class="actions">
+        <button class="btn primary" id="expqCheckBtn">Проверить квесты</button>
+        <button class="btn hidden" id="expqReportBtn">⬇ Отчёт (.txt)</button>
+      </div>
+      <div id="expqStatus" class="status hidden"></div>
+      <pre id="expqLog" class="joblog hidden"></pre>
+      <div id="expqResult" class="hidden">
+        <div id="expqChips" class="tools-status"></div>
+        <div id="expqProblems"></div>
+        <div id="expqChains"></div>
+      </div>
+    </div>
+    <div id="expqGuideMount"></div>
+    <div class="card">
+      <h2>Слияние двух паков квестов (ваш + новый)</h2>
+      <p class="hint" style="margin:0 0 12px">Конфликтующие ID квестов/объективов/NPC из нового пака будут автоматически перенумерованы, все ссылки — переписаны, идентичные файлы — пропущены. Прогресс игроков (PlayerData/GroupData) берётся только из ВАШЕГО пака.</p>
+      <div class="row">
+        <label class="fld grow" style="margin:0">ВАШ пак (ZIP)
+          <input type="file" id="expqPackA" accept=".zip">
+        </label>
+        <label class="fld grow" style="margin:0">…или путь
+          <input type="text" id="expqPathA" placeholder="C:\Server\profiles\ExpansionMod\Quests">
+        </label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="fld grow" style="margin:0">НОВЫЙ пак (ZIP)
+          <input type="file" id="expqPackB" accept=".zip">
+        </label>
+        <label class="fld grow" style="margin:0">…или путь
+          <input type="text" id="expqPathB" placeholder="C:\Downloads\Quests_new">
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="expqMergeBtn">Слить паки (скачать ZIP)</button>
+      </div>
+      <div class="or-divider"><span>или сохранить в папку</span></div>
+      <div class="row">
+        <input type="text" id="expqOutPath" class="grow" placeholder="C:\DayZ\quests_merged">
+        <button class="btn" id="expqMergeSaveBtn">Слить и сохранить</button>
+      </div>
+      <div id="expqMergeStatus" class="status hidden"></div>
+      <pre id="expqMergeLog" class="joblog hidden"></pre>
+      <div id="expqMergeResult"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: EXPANSION LOADOUTS ============ -->
+  <section id="tab-expl" class="tab">
+    <div class="card">
+      <h2>Expansion Лодауты — проверка</h2>
+      <p class="hint" style="margin:0 0 12px">Прикрепите ZIP папки Loadouts или укажите путь. Проверка: битый JSON, Chance вне 0..1, Quantity/Health где Min больше Max, пустые ClassName, список всех класснеймов (опционально — сверка с types.xml).</p>
+      <div class="row">
+        <input type="file" id="explPack" accept=".zip" style="flex:1">
+        <span class="muted" style="align-self:center">или путь:</span>
+        <input type="text" id="explPath" class="grow" placeholder="C:\Server\profiles\ExpansionMod\Loadouts">
+        <label class="btn">types.xml… <input type="file" id="explTypes" accept=".xml" hidden></label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="explCheckBtn">Проверить лодауты</button>
+      </div>
+      <div id="explStatus" class="status hidden"></div>
+      <pre id="explLog" class="joblog hidden"></pre>
+      <div id="explResult" class="hidden">
+        <div id="explChips" class="tools-status"></div>
+        <div id="explProblems"></div>
+      </div>
+    </div>
+    <div id="explGuideMount"></div>
+    <div class="card">
+      <h2>Слияние двух папок лодаутов (ваши + новые)</h2>
+      <p class="hint" style="margin:0 0 12px">Одинаковые файлы пропускаются, при различии новый файл сохраняется с суффиксом _v2 (в отчёте будет напоминание обновить NPCLoadoutFile).</p>
+      <div class="row">
+        <label class="fld grow" style="margin:0">ВАШИ лодауты (ZIP)
+          <input type="file" id="explPackA" accept=".zip">
+        </label>
+        <label class="fld grow" style="margin:0">…или путь
+          <input type="text" id="explPathA" placeholder="C:\Server\profiles\ExpansionMod\Loadouts">
+        </label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="fld grow" style="margin:0">НОВЫЕ лодауты (ZIP)
+          <input type="file" id="explPackB" accept=".zip">
+        </label>
+        <label class="fld grow" style="margin:0">…или путь
+          <input type="text" id="explPathB" placeholder="C:\Downloads\Loadouts_new">
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="explMergeBtn">Слить (скачать ZIP)</button>
+      </div>
+      <div class="or-divider"><span>или сохранить в папку</span></div>
+      <div class="row">
+        <input type="text" id="explOutPath" class="grow" placeholder="C:\DayZ\loadouts_merged">
+        <button class="btn" id="explMergeSaveBtn">Слить и сохранить</button>
+      </div>
+      <div id="explMergeStatus" class="status hidden"></div>
+      <pre id="explMergeLog" class="joblog hidden"></pre>
+      <div id="explMergeResult"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: MISSION FILES ============ -->
+  <section id="tab-msn" class="tab">
+    <div class="card">
+      <h2>Файлы миссии — настройка с подсказками по каждой строчке</h2>
+      <div class="disclaimer">⚠ Программа может ошибаться. Перед заменой файлов на сервере: сделайте резервную копию оригинала, прочитайте во вкладке «Журнал», что именно сделала программа, и прогоните изменённый файл через «Проверку файлов». Особенно внимательно — с файлами миссии: ошибка в них может сломать экономику сервера.</div>
+      <p class="hint" style="margin:0 0 12px">Поддерживаются: globals.xml, economy.xml, events.xml, cfgweather.xml, cfggameplay.json, cfgeffectarea.json, cfgplayerspawnpoints.xml, cfgeventspawns.xml (обзор). Откройте файл — под каждым параметром будет объяснение, что он делает. Правите значения → скачиваете готовый файл.</p>
+      <div class="row">
+        <input type="file" id="msnFile" accept=".xml,.json" style="flex:1">
+        <button class="btn primary" id="msnOpenBtn">Открыть файл</button>
+      </div>
+      <div id="msnStatus" class="status hidden"></div>
+    </div>
+    <div class="card hidden" id="msnEditor">
+      <h2 id="msnTitle"></h2>
+      <p class="hint" id="msnFileDesc"></p>
+      <div id="msnInfo"></div>
+      <div id="msnForm"></div>
+      <div class="actions">
+        <button class="btn primary" id="msnSaveBtn">⬇ Скачать изменённый файл</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>🌗 Калькулятор дня и ночи (serverDZ.cfg)</h2>
+      <div class="disclaimer">⚠ Проверьте рассчитанные значения на тестовом сервере перед боевым применением.</div>
+      <p class="hint" style="margin:0 0 10px">Задайте, сколько РЕАЛЬНОГО времени должны длиться игровой день и игровая ночь — программа посчитает ускорения времени для serverDZ.cfg. Светлое время суток в игре — примерно с 05:00 до 20:00 летом (15 ч); при желании поправьте.</p>
+      <div class="row" style="flex-wrap:wrap;gap:14px">
+        <label class="fld" style="margin:0">Светлое время в игре: с (час)
+          <input type="number" id="dnLightFrom" value="5" min="0" max="23" style="width:110px">
+        </label>
+        <label class="fld" style="margin:0">до (час)
+          <input type="number" id="dnLightTo" value="20" min="1" max="24" style="width:110px">
+        </label>
+        <label class="fld" style="margin:0">Желаемый ДЕНЬ (реальных минут)
+          <input type="number" id="dnDayReal" value="180" min="5" style="width:140px">
+        </label>
+        <label class="fld" style="margin:0">Желаемая НОЧЬ (реальных минут)
+          <input type="number" id="dnNightReal" value="45" min="5" style="width:140px">
+        </label>
+        <button class="btn primary" id="dnCalcBtn" style="align-self:flex-end">Рассчитать</button>
+      </div>
+      <div id="dnResult" class="hidden">
+        <div id="dnChips" class="tools-status" style="margin-top:10px"></div>
+        <pre id="dnCfg" class="preview" style="max-height:200px;margin-top:8px"></pre>
+        <p class="hint">Вставьте эти строки в serverDZ.cfg. serverTimeAcceleration — ускорение игрового времени днём (1..64); serverNightTimeAcceleration — ДОПОЛНИТЕЛЬНЫЙ множитель ночью (0.1..64, итоговое ночное ускорение = произведение двух). serverTime="SystemTime" — стартовое время с часов сервера; serverTimePersistent=0 — не сохранять время между рестартами.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: SPAWN LOOT ============ -->
+  <section id="tab-spw" class="tab">
+    <div class="card">
+      <h2>Спавн-лут — проверка cfgspawnabletypes + cfgrandompresets</h2>
+      <p class="hint" style="margin:0 0 12px">Проверяются: ссылки на пресеты (главная причина «пустых» зомби и рюкзаков), шансы вне 0..1, дубликаты типов и пресетов, пустые группы, quantmin/quantmax, неиспользуемые пресеты. Опционально приложите types.xml — сверю класснеймы.</p>
+      <div class="row">
+        <label class="fld grow" style="margin:0">cfgspawnabletypes.xml
+          <input type="file" id="spwSpawn" accept=".xml">
+        </label>
+        <label class="fld grow" style="margin:0">cfgrandompresets.xml
+          <input type="file" id="spwPresets" accept=".xml">
+        </label>
+        <label class="fld grow" style="margin:0">types.xml (необязательно)
+          <input type="file" id="spwTypes" accept=".xml">
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="spwCheckBtn">Проверить спавн-лут</button>
+      </div>
+      <div id="spwStatus" class="status hidden"></div>
+      <pre id="spwLog" class="joblog hidden"></pre>
+      <div id="spwResult" class="hidden">
+        <div id="spwChips" class="tools-status"></div>
+        <div id="spwProblems"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Слияние спавн-лута двух серверов</h2>
+      <p class="hint" style="margin:0 0 12px">Одинаковые записи пропускаются, новые типы и пресеты добавляются. При конфликте (один тип/пресет с разным содержимым) побеждает выбранная сторона, каждый конфликт — в отчёте.</p>
+      <div class="row">
+        <label class="fld grow" style="margin:0">ВАШ cfgspawnabletypes.xml
+          <input type="file" id="spwSpawnA" accept=".xml">
+        </label>
+        <label class="fld grow" style="margin:0">ВАШ cfgrandompresets.xml
+          <input type="file" id="spwPresetsA" accept=".xml">
+        </label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <label class="fld grow" style="margin:0">НОВЫЙ cfgspawnabletypes.xml
+          <input type="file" id="spwSpawnB" accept=".xml">
+        </label>
+        <label class="fld grow" style="margin:0">НОВЫЙ cfgrandompresets.xml
+          <input type="file" id="spwPresetsB" accept=".xml">
+        </label>
+      </div>
+      <label class="chk big"><input type="checkbox" id="spwPreferFriend"> При конфликте брать НОВЫЕ записи (иначе — мои)</label>
+      <div class="actions">
+        <button class="btn primary" id="spwMergeBtn">Слить (скачать ZIP)</button>
+      </div>
+      <div class="or-divider"><span>или сохранить в папку</span></div>
+      <div class="row">
+        <input type="text" id="spwOutPath" class="grow" placeholder="C:\DayZ\spawnloot_merged">
+        <button class="btn" id="spwMergeSaveBtn">Слить и сохранить</button>
+      </div>
+      <div id="spwMergeStatus" class="status hidden"></div>
+      <pre id="spwMergeLog" class="joblog hidden"></pre>
+      <div id="spwMergeResult"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: ind ============ -->
+  <section id="tab-ind" class="tab">
+    <div class="card">
+      <h2>Inedia Infected AI — настройка конфига</h2>
+      <div class="disclaimer">⚠ Программа может ошибаться. Сделайте копию конфига, проверьте изменённый файл и вкладку «Журнал» перед заливкой на сервер.</div>
+      <p class="hint" style="margin:0 0 12px">Прикрепите InediaInfectedAIConfig.json (профиль сервера, папка Inedia) или ZIP папки. Под каждым параметром — описание из вики автора; ключевые параметры переведены на русский. Полный гайд: github.com/ysaroka/InediaInfectedAI/wiki</p>
+      <div class="row">
+        <input type="file" id="indFile" accept=".json,.zip" style="flex:1">
+        <button class="btn primary" id="indOpenBtn">Открыть</button>
+      </div>
+      <div class="row hidden" id="indPickerRow" style="margin-top:8px">
+        <select id="indPicker" class="grow"></select>
+        <button class="btn" id="indPickBtn">Открыть выбранный файл</button>
+      </div>
+      <div id="indStatus" class="status hidden"></div>
+    </div>
+    <div id="indGuideMount"></div>
+    <div class="card hidden" id="indEditor">
+      <h2 id="indTitle"></h2>
+      <p class="hint" id="indFileDesc"></p>
+      <div class="toolbar" style="margin:10px 0 4px">
+        <input type="text" id="indSearch" placeholder="Поиск по параметрам…">
+        <span class="muted" id="indCount"></span>
+      </div>
+      <div id="indForm"></div>
+      <div class="actions">
+        <button class="btn primary" id="indSaveBtn">⬇ Скачать изменённый файл</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: trj ============ -->
+  <section id="tab-trj" class="tab">
+    <div class="card">
+      <h2>TerjeMods — настройка конфигов (медицина, навыки, радиация…)</h2>
+      <div class="disclaimer">⚠ Программа может ошибаться. Сделайте копию конфига, проверьте изменённый файл и вкладку «Журнал» перед заливкой на сервер.</div>
+      <p class="hint" style="margin:0 0 12px">Прикрепите файл из папки TerjeSettings (Core.cfg, Medicine.cfg, Skills.cfg…) или ZIP всей папки. Каждый параметр подписан: тип, значение по умолчанию и описание; ключевые переведены на русский. Гайды на русском: github.com/TerjeBruoygard/TerjeMods/tree/master/WIKI/ru</p>
+      <div class="row">
+        <input type="file" id="trjFile" accept=".cfg,.zip" style="flex:1">
+        <button class="btn primary" id="trjOpenBtn">Открыть</button>
+      </div>
+      <div class="row hidden" id="trjPickerRow" style="margin-top:8px">
+        <select id="trjPicker" class="grow"></select>
+        <button class="btn" id="trjPickBtn">Открыть выбранный файл</button>
+      </div>
+      <div id="trjStatus" class="status hidden"></div>
+    </div>
+    <div id="trjGuideMount"></div>
+    <div class="card hidden" id="trjEditor">
+      <h2 id="trjTitle"></h2>
+      <p class="hint" id="trjFileDesc"></p>
+      <div class="toolbar" style="margin:10px 0 4px">
+        <input type="text" id="trjSearch" placeholder="Поиск по параметрам…">
+        <span class="muted" id="trjCount"></span>
+      </div>
+      <div id="trjForm"></div>
+      <div class="actions">
+        <button class="btn primary" id="trjSaveBtn">⬇ Скачать изменённый файл</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TAB: FILE VALIDATOR ============ -->
+  <section id="tab-chk" class="tab">
+    <div class="card">
+      <h2>Проверка файлов — JSON, XML, конфиги</h2>
+      <p class="hint" style="margin:0 0 12px">Прикрепите любые файлы сервера: types.xml, cfgspawnabletypes.xml, квесты/лодауты (.json), config.cpp, .layout и т.д. Программа найдёт ошибки с точным номером строки, покажет фрагмент файла и подскажет, как исправить.</p>
+      <div class="row">
+        <label class="fld grow" style="margin:0">Файлы для проверки
+          <input type="file" id="chkFiles" multiple accept=".json,.xml,.cpp,.hpp,.c,.layout,.txt,.csv">
+        </label>
+        <label class="fld grow" style="margin:0">Или папка миссии
+          <input type="file" id="chkFolder" webkitdirectory multiple>
+        </label>
+        <label class="fld" style="margin:0;min-width:230px">Формат файлов
+          <select id="chkFormat">
+            <option value="">Определить автоматически</option>
+            <option value="types">types.xml (экономика)</option>
+            <option value="spawnabletypes">cfgspawnabletypes.xml</option>
+            <option value="randompresets">cfgrandompresets.xml</option>
+            <option value="xml">Другой XML</option>
+            <option value="json">JSON — квест/лодаут Expansion</option>
+            <option value="text">config.cpp / .layout / текст</option>
+          </select>
+        </label>
+        <button class="btn primary" id="chkRunBtn" style="align-self:flex-end">Проверить файлы</button>
+      </div>
+      <p class="hint" style="margin:8px 0 0">Обычно достаточно «Определить автоматически». Выберите конкретный формат, если у файла нет расширения или нужно убедиться, что это именно тот файл — например, что выбранный XML является настоящим types.xml.</p>
+      <p class="hint" style="margin:6px 0 0">Проверка экономики DayZ 1.30: nominal/min, флаги, шансы групп 0..1 и относительные веса предметов. При совместной загрузке проверяются дубли между файлами, ссылки на пресеты и подключения cfgeconomycore.xml; свои категории и тиры читаются из файлов limitsdefinition.</p>
+      <p class="hint" style="margin:6px 0 0">Из папки миссии читаются только XML и JSON, без storage. Максимум 200 файлов, 128 МБ на файл и 256 МБ суммарно. Файлы не изменяются. Красным — ошибки, жёлтым — замечания; для неполной загрузки некоторые связи проверить нельзя.</p>
+      <div id="chkStatus" class="status hidden"></div>
+      <pre id="chkLog" class="joblog hidden"></pre>
+      <div id="chkResults"></div>
+    </div>
+  </section>
+
+  <!-- ============ TAB 4: GLOBAL LOG ============ -->
+  <section id="tab-log" class="tab">
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:10px">
+        <h2 style="margin:0">Журнал действий и ошибок</h2>
+        <span class="spacer"></span>
+        <button class="btn sm" id="logCopyBtn">Скопировать журнал</button>
+        <button class="btn sm" id="logClearBtn">Очистить</button>
+      </div>
+      <pre id="globalLog" class="joblog" style="max-height:calc(100vh - 280px)"></pre>
+      <p class="hint">Здесь видно всё, что делает программа: анализ каждого PBO (включая зашифрованные и PBO с ресурсами), генерация аддона, вызовы DayZ Tools и все ошибки с указанием шага. Если что-то пошло не так — нажмите «Скопировать журнал» и пришлите текст разработчику.</p>
+    </div>
+  </section>
+
+<!-- edit cell popover -->
+<div id="editPop" class="pop hidden">
+  <div class="pop-title" id="popTitle"></div>
+  <div class="pop-hint" id="popHint"></div>
+  <input type="text" id="popInput">
+  <div class="pop-actions">
+    <button class="btn sm" id="popCancel">Отмена</button>
+    <button class="btn sm warn hidden" id="popReset">Сбросить правку</button>
+    <button class="btn sm primary" id="popOk">OK</button>
+  </div>
+</div>
+
+<!-- add param modal -->
+<div id="modalBack" class="modal-back hidden">
+  <div class="modal">
+    <h3 id="modalTitle">Добавить параметр</h3>
+    <label class="fld">Параметр
+      <select id="modalParam"></select>
+    </label>
+    <div id="modalCustomFields" class="hidden">
+      <label class="fld">Путь в конфиге (классы через /, последний — свойство)
+        <input type="text" id="modalPath" placeholder="Protection/biological  или  weight">
+      </label>
+      <label class="fld">Тип значения
+        <select id="modalType">
+          <option value="raw">авто (число / {массив} / строка)</option>
+          <option value="float">число</option>
+          <option value="int">целое</option>
+          <option value="string">строка (текст)</option>
+          <option value="intpair">пара чисел Ш,В</option>
+          <option value="strarray">список строк через запятую</option>
+        </select>
+      </label>
+    </div>
+    <div class="pop-hint" id="modalHint"></div>
+    <label class="fld">Значение
+      <input type="text" id="modalValue">
+    </label>
+    <div class="pop-actions">
+      <button class="btn" id="modalCancel">Отмена</button>
+      <button class="btn primary" id="modalOk">Добавить</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI assistant settings modal -->
+<div id="aiBack" class="modal-back hidden">
+  <div class="modal" style="max-width:660px">
+    <h3>🤖 ИИ-помощник (бесплатные нейросети)</h3>
+    <p class="hint" style="margin-top:0">Разбирает гайды со свободным текстом и переводит описания параметров на русский. Работает через бесплатные тарифы нейросетей — нужен только API-ключ (получается за пару минут, банковская карта не нужна). Ключ хранится ТОЛЬКО на вашем компьютере (settings.json). Нейросети отправляется текст гайда и имена параметров — сами значения ваших конфигов не отправляются.</p>
+    <label class="chk big"><input type="checkbox" id="aiEnabled"> Включить ИИ-помощник</label>
+    <div id="aiFields">
+      <label class="fld">Провайдер (пресеты бесплатных)
+        <select id="aiPreset"></select>
+      </label>
+      <div class="pop-hint" id="aiPresetHint"></div>
+      <label class="fld">Адрес API (base URL)
+        <input type="text" id="aiBaseUrl" placeholder="https://api.groq.com/openai/v1">
+      </label>
+      <label class="fld">API-ключ
+        <input type="password" id="aiKey" placeholder="вставьте ключ провайдера" autocomplete="off">
+      </label>
+      <label class="fld">Модель
+        <span class="row" style="margin:0"><input type="text" id="aiModel" class="grow" list="aiModelList" placeholder="имя модели"><button class="btn" id="aiModelsBtn" title="Запросить у провайдера список доступных моделей">Список моделей</button></span>
+        <datalist id="aiModelList"></datalist>
+      </label>
+      <div class="row" style="margin-top:8px">
+        <button class="btn" id="aiTestBtn">Проверить подключение</button>
+        <span class="muted" id="aiTestStatus" style="align-self:center"></span>
+      </div>
+    </div>
+    <div class="disclaimer" style="margin-top:10px">⚠ ИИ может ошибаться — сверяйте подставленные описания с оригинальным гайдом. Бесплатные тарифы имеют лимиты: при ошибке «429» подождите минуту или смените провайдера.</div>
+    <div class="pop-actions">
+      <button class="btn" id="aiCancel">Отмена</button>
+      <button class="btn primary" id="aiSave">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<footer>DayZ Override Builder — работает локально на вашем ПК; интернет нужен только для «Гайда по ссылке» и ИИ-помощника (по желанию). Не является продуктом Bohemia Interactive.<br>
+⚠ Программа может ошибаться: делайте резервные копии, проверяйте полученные файлы перед использованием и читайте вкладку «Журнал» — там видно каждое действие.</footer>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

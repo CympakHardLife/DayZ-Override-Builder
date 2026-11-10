@@ -1,8 +1,11 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"net/http"
+	"path"
+	"strings"
 
 	"dayzoverride/validator"
 )
@@ -12,10 +15,17 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, 405, "метод не поддерживается")
 		return
 	}
-	if err := r.ParseMultipartForm(64 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, 256<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			jsonError(w, 413, "общий размер загрузки превышает 256 МБ")
+			return
+		}
 		jsonError(w, 400, "ошибка загрузки файлов: "+err.Error())
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	fhs := r.MultipartForm.File["files"]
 	if len(fhs) == 0 {
 		jsonError(w, 400, "файлы не переданы")
@@ -28,48 +38,78 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	// формат выбирается пользователем на вкладке (кнопки «types / config / …»);
 	// пусто = определить автоматически. Читаем до старта горутины.
 	format := r.FormValue("format")
-	jobID, job := newJob("проверка-файлов")
 	// файлы читаем до ответа (тело запроса живёт только в хендлере)
-	type inFile struct {
-		name string
-		data []byte
+	paths := r.MultipartForm.Value["paths"]
+	if len(paths) != 0 && len(paths) != len(fhs) {
+		jsonError(w, 400, "список путей не соответствует списку файлов")
+		return
 	}
-	var files []inFile
-	for _, fh := range fhs {
+	var files []validator.InputFile
+	for i, fh := range fhs {
+		name := fh.Filename
+		if len(paths) != 0 {
+			name = paths[i]
+		}
+		var err error
+		name, err = validationPath(name)
+		if err != nil {
+			jsonError(w, 400, err.Error())
+			return
+		}
 		src, err := fh.Open()
 		if err != nil {
 			jsonError(w, 400, err.Error())
 			return
 		}
-		data, err := io.ReadAll(io.LimitReader(src, 128<<20))
+		data, err := io.ReadAll(io.LimitReader(src, (128<<20)+1))
 		src.Close()
 		if err != nil {
 			jsonError(w, 500, err.Error())
 			return
 		}
-		files = append(files, inFile{name: fh.Filename, data: data})
+		if len(data) > 128<<20 {
+			jsonError(w, 413, "файл превышает 128 МБ")
+			return
+		}
+		files = append(files, validator.InputFile{Name: name, Data: data})
 	}
+	jobID, job := newJob("проверка-файлов")
 	go func() {
 		defer job.guard()
-		var reports []*validator.FileReport
+		job.logf("Проверяю %d файлов и связи между ними…", len(files))
+		reports := validator.ValidateSet(files, format)
 		okCount := 0
-		for _, f := range files {
-			job.logf("Проверяю %s (%.1f КБ)…", f.name, float64(len(f.data))/1024)
-			rep := validator.ValidateAs(f.name, f.data, format)
+		for _, rep := range reports {
 			if rep.OK {
 				okCount++
 				kind := rep.DayZKind
 				if kind == "" {
 					kind = rep.Kind
 				}
-				job.logf("  %s: OK (%s), замечаний: %d", f.name, kind, len(rep.Problems))
+				job.logf("  %s: OK (%s), замечаний: %d", rep.Name, kind, len(rep.Problems))
 			} else {
-				job.logf("  %s: НАЙДЕНЫ ОШИБКИ (%d)", f.name, len(rep.Problems))
+				job.logf("  %s: НАЙДЕНЫ ОШИБКИ (%d)", rep.Name, len(rep.Problems))
 			}
-			reports = append(reports, rep)
 		}
 		job.logf("Проверка завершена: файлов %d, без ошибок %d", len(reports), okCount)
 		job.finish(map[string]interface{}{"reports": reports, "ok": okCount, "total": len(reports)}, nil)
 	}()
 	writeJSON(w, map[string]string{"jobId": jobID})
+}
+
+func validationPath(name string) (string, error) {
+	name = strings.ReplaceAll(name, "\\", "/")
+	if path.IsAbs(name) || strings.ContainsAny(name, ":\x00") {
+		return "", errors.New("ожидается относительный путь файла внутри миссии")
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == ".." {
+			return "", errors.New("путь файла не должен выходить за папку миссии")
+		}
+	}
+	name = path.Clean(name)
+	if name == "." {
+		return "", errors.New("пустое имя файла")
+	}
+	return name, nil
 }

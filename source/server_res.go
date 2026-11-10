@@ -74,6 +74,29 @@ func classifyRes(name string) string {
 	return "binary"
 }
 
+// resPathKey нормализует только ключ поиска, сохраняя исходное имя в PBO.
+func resPathKey(path string) string {
+	return strings.ToLower(strings.ReplaceAll(path, "\\", "/"))
+}
+
+func findResEntry(entries []pbo.Entry, path string) (*pbo.Entry, error) {
+	key := resPathKey(path)
+	var found *pbo.Entry
+	for i := range entries {
+		if resPathKey(entries[i].Name) != key {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("путь %s неоднозначен: в PBO несколько файлов с этим именем", path)
+		}
+		found = &entries[i]
+	}
+	if found == nil {
+		return nil, fmt.Errorf("файл %s не найден в PBO", path)
+	}
+	return found, nil
+}
+
 func (s *resSession) fileList() []resFile {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -81,29 +104,44 @@ func (s *resSession) fileList() []resFile {
 	for i := range s.entries {
 		e := &s.entries[i]
 		size := int(e.DataSize)
-		if m, ok := s.modified[strings.ToLower(e.Name)]; ok {
+		m, ok := s.modified[resPathKey(e.Name)]
+		if ok {
 			size = len(m)
 		}
 		out = append(out, resFile{
 			Path: e.Name,
 			Size: size,
 			Kind: classifyRes(e.Name),
-			Mod:  hasKey(s.modified, e.Name),
+			Mod:  ok,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Path) < strings.ToLower(out[j].Path) })
 	return out
 }
 
-func hasKey(m map[string][]byte, name string) bool {
-	_, ok := m[strings.ToLower(name)]
-	return ok
+func (s *resSession) writeEntryData(path string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, err := findResEntry(s.entries, path)
+	if err != nil {
+		return err
+	}
+	if s.modified == nil {
+		s.modified = map[string][]byte{}
+	}
+	s.modified[resPathKey(e.Name)] = data
+	return nil
 }
 
 // readEntryData возвращает актуальные байты файла (с учётом правок).
 func (s *resSession) readEntryData(path string) ([]byte, error) {
 	s.mu.Lock()
-	if m, ok := s.modified[strings.ToLower(path)]; ok {
+	e, err := findResEntry(s.entries, path)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	if m, ok := s.modified[resPathKey(e.Name)]; ok {
 		s.mu.Unlock()
 		return m, nil
 	}
@@ -113,12 +151,58 @@ func (s *resSession) readEntryData(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer p.Close()
+	e, err = findResEntry(p.Entries, path)
+	if err != nil {
+		return nil, err
+	}
+	return p.ReadEntry(e)
+}
+
+func (s *resSession) buildPBO() ([]byte, int, error) {
+	s.mu.Lock()
+	modified := make(map[string][]byte, len(s.modified))
+	for path, data := range s.modified {
+		modified[path] = data
+	}
+	s.mu.Unlock()
+	p, err := pbo.Open(s.pboPath)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer p.Close()
+	replacements := make(map[string][]byte, len(modified))
+	for path, data := range modified {
+		key := resPathKey(path)
+		if _, ok := replacements[key]; ok {
+			return nil, 0, fmt.Errorf("несколько правок для файла %s в PBO", path)
+		}
+		replacements[key] = data
+	}
+	matched := make(map[string]bool, len(replacements))
+	var files []pbo.File
 	for i := range p.Entries {
-		if strings.EqualFold(p.Entries[i].Name, path) {
-			return p.ReadEntry(&p.Entries[i])
+		e := &p.Entries[i]
+		key := resPathKey(e.Name)
+		data, ok := replacements[key]
+		if ok {
+			if matched[key] {
+				return nil, 0, fmt.Errorf("путь %s неоднозначен: в PBO несколько файлов с этим именем", e.Name)
+			}
+			matched[key] = true
+		} else {
+			data, err = p.ReadEntry(e)
+			if err != nil {
+				return nil, 0, fmt.Errorf("%s: %v", e.Name, err)
+			}
+		}
+		files = append(files, pbo.File{Name: e.Name, Data: data})
+	}
+	for path := range replacements {
+		if !matched[path] {
+			return nil, 0, fmt.Errorf("файл %s не найден в PBO", path)
 		}
 	}
-	return nil, fmt.Errorf("файл %s не найден в PBO", path)
+	return pbo.Build(s.prefix, files), len(replacements), nil
 }
 
 // ---------- endpoints ----------
@@ -306,9 +390,10 @@ func handleResText(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, 422, "config.bin доступен только для просмотра — правки конфигов делайте через вкладку «1 Мод»")
 			return
 		}
-		s.mu.Lock()
-		s.modified[strings.ToLower(body.Path)] = []byte(body.Content)
-		s.mu.Unlock()
+		if err := s.writeEntryData(body.Path, []byte(body.Content)); err != nil {
+			jsonError(w, 404, err.Error())
+			return
+		}
 		glogf("gui-мод", "Изменён файл: %s (%.1f КБ)", body.Path, float64(len(body.Content))/1024)
 		writeJSON(w, map[string]string{"status": "ok"})
 	default:
@@ -414,9 +499,10 @@ func handleResReplace(w http.ResponseWriter, r *http.Request) {
 		data = edds.Encode(img)
 		note = " (PNG сконвертирован в EDDS: несжатый BGRA8 с мип-уровнями)"
 	}
-	s.mu.Lock()
-	s.modified[targetLow] = data
-	s.mu.Unlock()
+	if err := s.writeEntryData(path, data); err != nil {
+		jsonError(w, 404, err.Error())
+		return
+	}
 	glogf("gui-мод", "Заменён файл: %s <- %s (%.1f КБ)%s", path, fhs[0].Filename, float64(len(data))/1024, note)
 	writeJSON(w, map[string]string{"status": "ok", "note": note})
 }
@@ -451,35 +537,13 @@ func handleResBuild(w http.ResponseWriter, r *http.Request) {
 	jobID, job := newJob("gui-сборка")
 	go func() {
 		defer job.guard()
-		s.mu.Lock()
-		modCount := len(s.modified)
-		s.mu.Unlock()
-		job.logf("Пересобираю %s: заменено файлов %d", s.origName, modCount)
-		p, err := pbo.Open(s.pboPath)
+		job.logf("Пересобираю %s…", s.origName)
+		pboData, modCount, err := s.buildPBO()
 		if err != nil {
 			job.finish(nil, err)
 			return
 		}
-		var files []pbo.File
-		for i := range p.Entries {
-			e := &p.Entries[i]
-			s.mu.Lock()
-			m, ok := s.modified[strings.ToLower(e.Name)]
-			s.mu.Unlock()
-			if ok {
-				files = append(files, pbo.File{Name: e.Name, Data: m})
-				continue
-			}
-			data, err := p.ReadEntry(e)
-			if err != nil {
-				p.Close()
-				job.finish(nil, fmt.Errorf("%s: %v", e.Name, err))
-				return
-			}
-			files = append(files, pbo.File{Name: e.Name, Data: data})
-		}
-		p.Close()
-		pboData := pbo.Build(s.prefix, files)
+		job.logf("Заменено файлов: %d", modCount)
 		job.logf("PBO собран: %.1f МБ (prefix=%s)", float64(len(pboData))/1e6, s.prefix)
 
 		outFiles := []struct {
@@ -580,4 +644,3 @@ func handleResBuild(w http.ResponseWriter, r *http.Request) {
 	}()
 	writeJSON(w, map[string]string{"jobId": jobID})
 }
-
