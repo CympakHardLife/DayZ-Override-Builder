@@ -1,3 +1,5 @@
+> **Сборка исходников:** сначала восстановите папки пакетов командой `python prepare_source.py`. Подробно: [BUILD.md](BUILD.md). Версия опубликованного исходного кода — **1.11.0**. Готовый EXE этим обновлением не заменяется.
+
 <div align="center">
 
 # 🧟 DayZ Override Builder
@@ -11,7 +13,7 @@
 [![Лицензия: MIT](https://img.shields.io/badge/%D0%9B%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-22c55e.svg?style=for-the-badge)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.21-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev)
 [![Платформа](https://img.shields.io/badge/%D0%9F%D0%BB%D0%B0%D1%82%D1%84%D0%BE%D1%80%D0%BC%D0%B0-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)]()
-[![Релиз](https://img.shields.io/badge/%D0%A0%D0%B5%D0%BB%D0%B8%D0%B7-v1.10.2-8b5cf6?style=for-the-badge)](../../releases)
+[![Релиз](https://img.shields.io/badge/%D0%A0%D0%B5%D0%BB%D0%B8%D0%B7-v1.10.2-8b5cf6?style=for-the-badge)](https://github.com/CympakHardLife/DayZ-Override-Builder/releases)
 [![Языки](https://img.shields.io/badge/%D0%98%D0%BD%D1%82%D0%B5%D1%80%D1%84%D0%B5%D0%B9%D1%81-RU%20%2F%20EN%20%2F%20UK-f59e0b?style=for-the-badge)]()
 
 Набор инструментов для **владельцев серверов и мододелов DayZ**.

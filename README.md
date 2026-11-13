@@ -1,3 +1,5 @@
+> **Building from source:** first restore the package folders with `python prepare_source.py`. See [BUILD.md](BUILD.md). Published source version: **1.11.0**; the existing executable has not been replaced by this maintenance update.
+
 <div align="center">
 
 # 🧟 DayZ Override Builder
@@ -11,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e.svg?style=for-the-badge)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.21-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)]()
-[![Release](https://img.shields.io/badge/Release-v1.10.2-8b5cf6?style=for-the-badge)](../../releases)
+[![Release](https://img.shields.io/badge/Source-v1.11.0-8b5cf6?style=for-the-badge)](https://github.com/CympakHardLife/DayZ-Override-Builder/releases)
 [![UI](https://img.shields.io/badge/UI-RU%20%2F%20EN%20%2F%20UK-f59e0b?style=for-the-badge)]()
 
 A toolbox for **DayZ server owners and modders**.
